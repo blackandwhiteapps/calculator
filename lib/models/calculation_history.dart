@@ -20,3 +20,4 @@ class CalculationHistory extends HiveObject {
   });
 }
 
+
