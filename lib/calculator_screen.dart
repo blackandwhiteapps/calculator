@@ -26,8 +26,10 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
         _backspace();
       } else if (value == '=') {
         _calculate();
-      } else if (value == '(' || value == ')') {
-        _handleParenthesis(value);
+      } else if (value == '( )') {
+        _handleParenthesis();
+      } else if (value == '%') {
+        _handlePercent();
       } else if (['+', '-', '×', '÷'].contains(value)) {
         _handleOperation(value);
       } else if (value == '.') {
@@ -59,7 +61,16 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       _hasError = false;
       _result = '';
     } else {
+      _insertImplicitMultiply();
       _expression += number;
+    }
+  }
+
+  // After ')' or '%', a new number starts a new factor: (2)3 -> (2)×3
+  void _insertImplicitMultiply() {
+    if (_expression.isNotEmpty &&
+        [')', '%'].contains(_expression[_expression.length - 1])) {
+      _expression += '×';
     }
   }
 
@@ -71,6 +82,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       _result = '';
     } else {
       // Check if current number already has a decimal
+      _insertImplicitMultiply();
       String lastNumber = _getLastNumber();
       if (!lastNumber.contains('.')) {
         if (lastNumber.isEmpty || _expression.isEmpty || 
@@ -111,7 +123,25 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     }
   }
 
-  void _handleParenthesis(String paren) {
+  void _handlePercent() {
+    if (_hasError) return;
+    
+    // If there's a result showing, take a percentage of the result
+    if (_result.isNotEmpty) {
+      _expression = _result;
+      _result = '';
+    }
+    
+    if (_expression.isEmpty) return;
+    
+    // Percent applies to a number or a closed group, once
+    String lastChar = _expression[_expression.length - 1];
+    if (RegExp(r'[0-9.)]').hasMatch(lastChar)) {
+      _expression += '%';
+    }
+  }
+
+  void _handleParenthesis() {
     if (_hasError) {
       _expression = '';
       _hasError = false;
@@ -123,7 +153,15 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       _result = '';
     }
     
-    if (paren == '(') {
+    // Close a group when one is open and the last token can end it,
+    // otherwise open a new one
+    int openCount = _expression.split('(').length - 1;
+    int closeCount = _expression.split(')').length - 1;
+    String lastChar = _expression.isEmpty ? '' : _expression[_expression.length - 1];
+    bool canClose = openCount > closeCount &&
+        !['+', '-', '×', '÷', '('].contains(lastChar);
+    
+    if (!canClose) {
       // Can add opening parenthesis
       if (_expression.isEmpty || ['+', '-', '×', '÷', '('].contains(
           _expression.isEmpty ? '' : _expression[_expression.length - 1])) {
@@ -133,16 +171,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
         _expression += '×(';
       }
     } else {
-      // Closing parenthesis
-      int openCount = _expression.split('(').length - 1;
-      int closeCount = _expression.split(')').length - 1;
-      
-      if (openCount > closeCount) {
-        String lastChar = _expression.isEmpty ? '' : _expression[_expression.length - 1];
-        if (!['+', '-', '×', '÷', '('].contains(lastChar)) {
-          _expression += ')';
-        }
-      }
+      _expression += ')';
     }
   }
 
@@ -150,7 +179,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     if (_expression.isEmpty) return '';
     
     int i = _expression.length - 1;
-    while (i >= 0 && !['+', '-', '×', '÷', '(', ')'].contains(_expression[i])) {
+    while (i >= 0 && !['+', '-', '×', '÷', '(', ')', '%'].contains(_expression[i])) {
       i--;
     }
     return _expression.substring(i + 1);
@@ -261,8 +290,8 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                   Row(
                     children: [
                       _buildButton('C'),
-                      _buildButton('('),
-                      _buildButton(')'),
+                      _buildButton('( )'),
+                      _buildButton('%'),
                       _buildButton('÷'),
                     ],
                   ),

@@ -40,7 +40,7 @@ class ExpressionEvaluator {
     for (int i = 0; i < expr.length; i++) {
       String char = expr[i];
       
-      if (char == '(' || char == ')') {
+      if (char == '(' || char == ')' || char == '%') {
         if (current.isNotEmpty) {
           tokens.add(current);
           current = '';
@@ -100,9 +100,23 @@ class ExpressionEvaluator {
       ];
     }
     
+    // Attach postfix percent signs to their operand: ['50', '%'] -> ['50%']
+    List<String> merged = [];
+    for (var token in tokens) {
+      if (token == '%') {
+        if (merged.isEmpty || _isOperator(merged.last)) {
+          throw Exception('Percent without operand');
+        }
+        merged[merged.length - 1] += '%';
+      } else {
+        merged.add(token);
+      }
+    }
+    tokens = merged;
+    
     // Handle unary minus at the start
     if (tokens.length >= 2 && tokens[0] == '-') {
-      tokens = ['-${tokens[1]}', ...tokens.sublist(2)];
+      tokens = [_negate(tokens[1]), ...tokens.sublist(2)];
     }
     
     // Process unary minus after operators
@@ -110,10 +124,9 @@ class ExpressionEvaluator {
       if (tokens[i] == '-' && 
           ['+', '-', '*', '/'].contains(tokens[i - 1])) {
         // Unary minus
-        double value = -double.parse(tokens[i + 1]);
         tokens = [
           ...tokens.sublist(0, i),
-          value.toString(),
+          _negate(tokens[i + 1]),
           ...tokens.sublist(i + 2),
         ];
         i--;
@@ -124,8 +137,8 @@ class ExpressionEvaluator {
     int i = 1;
     while (i < tokens.length) {
       if (tokens[i] == '*' || tokens[i] == '/') {
-        double left = double.parse(tokens[i - 1]);
-        double right = double.parse(tokens[i + 1]);
+        double left = _parseOperand(tokens[i - 1]);
+        double right = _parseOperand(tokens[i + 1]);
         double result;
         
         if (tokens[i] == '*') {
@@ -150,8 +163,13 @@ class ExpressionEvaluator {
     i = 1;
     while (i < tokens.length) {
       if (tokens[i] == '+' || tokens[i] == '-') {
-        double left = double.parse(tokens[i - 1]);
-        double right = double.parse(tokens[i + 1]);
+        double left = _parseOperand(tokens[i - 1]);
+        double right = _parseOperand(tokens[i + 1]);
+        // A percentage added or subtracted is taken of the left side:
+        // 200+10% -> 200+20
+        if (tokens[i + 1].endsWith('%')) {
+          right = left * right;
+        }
         double result = tokens[i] == '+' ? left + right : left - right;
         
         tokens = [
@@ -169,6 +187,27 @@ class ExpressionEvaluator {
       throw Exception('Empty expression after evaluation');
     }
     
-    return double.parse(tokens[0]);
+    if (tokens.length != 1) {
+      throw Exception('Malformed expression');
+    }
+    
+    return _parseOperand(tokens[0]);
+  }
+  
+  static bool _isOperator(String token) {
+    return ['+', '-', '*', '/'].contains(token);
+  }
+  
+  static String _negate(String token) {
+    return token.startsWith('-') ? token.substring(1) : '-$token';
+  }
+  
+  // Parses a number, dividing by 100 for each trailing percent sign
+  static double _parseOperand(String token) {
+    double value = double.parse(token.replaceAll('%', ''));
+    for (int i = token.length - 1; i >= 0 && token[i] == '%'; i--) {
+      value /= 100;
+    }
+    return value;
   }
 }
